@@ -738,13 +738,30 @@ class NotebookParser(rst.Parser):
         CommonMark.
 
         """
+        env = document.settings.env
         try:
-            nb = nbformat.reads(inputstring, as_version=_ipynbversion)
+            # TODO: get the relative env.srcdir
+            # TODO: or: write inputstring to file in tempdir?
+            relative_doc = env.doc2path(env.docname, base='doc')
+            cm_string = env.config.nbsphinx_contents_manager
+            if not relative_doc.endswith('.ipynb') and cm_string:
+                print('##################')
+                print(relative_doc)
+                print('******************')
+                import importlib
+                module_string, _, cls = cm_string.rpartition('.')
+                cm_module = importlib.import_module(module_string)
+                cm = getattr(cm_module, cls)()  # Instantiate with defaults
+                model = cm.get(relative_doc)
+                assert model['type'] == 'notebook'
+                nb = model['content']
+            else:
+                nb = nbformat.reads(inputstring, as_version=_ipynbversion)
         except Exception:
+            raise  # TODO: temporary!
             # NB: The use of the RST parser is temporary!
             rst.Parser.parse(self, inputstring, document)
             return
-        env = document.settings.env
         srcdir = os.path.dirname(env.doc2path(env.docname))
         auxdir = os.path.join(env.doctreedir, 'nbsphinx')
         sphinx.util.ensuredir(auxdir)
@@ -1604,6 +1621,7 @@ def setup(app):
     app.add_config_value('nbsphinx_epilog', None, rebuild='env')
     app.add_config_value('nbsphinx_input_prompt', '[%s]:', rebuild='env')
     app.add_config_value('nbsphinx_output_prompt', '[%s]:', rebuild='env')
+    app.add_config_value('nbsphinx_contents_manager', None, rebuild='env')
 
     app.add_directive('nbinput', NbInput)
     app.add_directive('nboutput', NbOutput)
